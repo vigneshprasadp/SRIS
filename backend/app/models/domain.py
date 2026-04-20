@@ -49,14 +49,15 @@ class Product(Base):
     expiry_days    = Column(Integer, nullable=True)   # None = non-perishable
     is_active      = Column(Boolean, default=True)
     description    = Column(Text, nullable=True)
-    unit           = Column(String(50), nullable=True, default="unit")  # kg, L, pcs …
+    unit           = Column(String(50), nullable=True, default="unit")  # kg, L, pcs ...
     created_at     = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at     = Column(DateTime, default=datetime.datetime.utcnow,
                             onupdate=datetime.datetime.utcnow)
 
     # relationships
-    alerts = relationship("Alert", back_populates="product",
-                          cascade="all, delete-orphan")
+    alerts     = relationship("Alert", back_populates="product",
+                              cascade="all, delete-orphan")
+    sale_items = relationship("SaleItem", back_populates="product")
 
     @property
     def stock_status(self) -> str:
@@ -126,3 +127,78 @@ class Alert(Base):
 
     # relationships
     product = relationship("Product", back_populates="alerts")
+
+
+# ─────────────────────────────────────────────
+#  SALE TRANSACTION  (one row = one completed bill)
+# ─────────────────────────────────────────────
+class SaleTransaction(Base):
+    __tablename__ = "sales_transactions"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    branch_id      = Column(String(20), nullable=False, default="B001", index=True)
+    cashier_id     = Column(Integer, ForeignKey("employees.id", ondelete="SET NULL"),
+                            nullable=True, index=True)
+    invoice_number = Column(String(50), nullable=False, unique=True, index=True)
+    total_amount   = Column(Float, nullable=False)
+    payment_mode   = Column(String(20), nullable=False, default="Cash")  # Cash|Card|UPI|Wallet
+    sale_date      = Column(DateTime, nullable=False, default=datetime.datetime.utcnow, index=True)
+    created_at     = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # relationships
+    cashier  = relationship("Employee")
+    items    = relationship("SaleItem", back_populates="transaction",
+                            cascade="all, delete-orphan")
+    pay_log  = relationship("PaymentLog", back_populates="transaction",
+                             uselist=False, cascade="all, delete-orphan")
+
+
+# ─────────────────────────────────────────────
+#  SALE ITEM  (products inside a bill)
+# ─────────────────────────────────────────────
+class SaleItem(Base):
+    __tablename__ = "sale_items"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    transaction_id = Column(Integer, ForeignKey("sales_transactions.id", ondelete="CASCADE"),
+                            nullable=False, index=True)
+    product_id     = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"),
+                            nullable=True, index=True)
+    quantity       = Column(Integer, nullable=False)
+    unit_price     = Column(Float, nullable=False)
+    subtotal       = Column(Float, nullable=False)
+
+    # relationships
+    transaction = relationship("SaleTransaction", back_populates="items")
+    product     = relationship("Product", back_populates="sale_items")
+
+
+# ─────────────────────────────────────────────
+#  BRANCH REVENUE  (daily aggregated revenue per branch)
+# ─────────────────────────────────────────────
+class BranchRevenue(Base):
+    __tablename__ = "branch_revenue"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    branch_id     = Column(String(20), nullable=False, default="B001", index=True)
+    date          = Column(String(10), nullable=False, index=True)  # "YYYY-MM-DD"
+    daily_revenue = Column(Float, default=0.0)
+    daily_orders  = Column(Integer, default=0)
+
+
+# ─────────────────────────────────────────────
+#  PAYMENT LOG
+# ─────────────────────────────────────────────
+class PaymentLog(Base):
+    __tablename__ = "payment_logs"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    transaction_id = Column(Integer, ForeignKey("sales_transactions.id", ondelete="CASCADE"),
+                            nullable=False, unique=True, index=True)
+    payment_status = Column(String(20), nullable=False, default="SUCCESS")  # SUCCESS|FAILED|PENDING
+    payment_mode   = Column(String(20), nullable=False, default="Cash")
+    timestamp      = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # relationships
+    transaction = relationship("SaleTransaction", back_populates="pay_log")
+\

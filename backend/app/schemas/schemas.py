@@ -261,3 +261,97 @@ class BranchSummaryUpdate(BaseModel):
 class MessageResponse(BaseModel):
     message : str
     detail  : Optional[str] = None
+
+
+# ─────────────────────────────────────────────
+#  SALES SCHEMAS
+# ─────────────────────────────────────────────
+VALID_PAYMENT_MODES = {"Cash", "Card", "UPI", "Wallet"}
+
+class SaleItemIn(BaseModel):
+    product_id : int
+    quantity   : int
+
+    @field_validator("quantity")
+    @classmethod
+    def qty_positive(cls, v):
+        if v <= 0:
+            raise ValueError("quantity must be at least 1")
+        return v
+
+class SaleCreateRequest(BaseModel):
+    branch_id    : str = "B001"
+    cashier_id   : Optional[int] = None
+    products     : List[SaleItemIn]
+    payment_mode : str = "Cash"
+
+    @field_validator("payment_mode")
+    @classmethod
+    def payment_mode_valid(cls, v):
+        if v not in VALID_PAYMENT_MODES:
+            raise ValueError(f"payment_mode must be one of: {sorted(VALID_PAYMENT_MODES)}")
+        return v
+
+    @field_validator("products")
+    @classmethod
+    def products_not_empty(cls, v):
+        if not v:
+            raise ValueError("products list cannot be empty")
+        return v
+
+class SaleItemOut(BaseModel):
+    product_id   : Optional[int]
+    product_name : str
+    quantity     : int
+    unit_price   : float
+    subtotal     : float
+
+    model_config = ConfigDict(from_attributes=True)
+
+class SaleTransactionOut(BaseModel):
+    id             : int
+    invoice_number : str
+    branch_id      : str
+    cashier_id     : Optional[int]
+    cashier_name   : Optional[str]
+    total_amount   : float
+    payment_mode   : str
+    sale_date      : datetime
+    items          : List[SaleItemOut]
+
+    model_config = ConfigDict(from_attributes=True)
+
+class SalesHistoryResponse(BaseModel):
+    total : int
+    items : List[SaleTransactionOut]
+
+
+# ─────────────────────────────────────────────
+#  ANALYTICS SCHEMAS
+# ─────────────────────────────────────────────
+class TopProductOut(BaseModel):
+    product_id   : int
+    product_name : str
+    category     : str
+    total_qty    : int
+    total_revenue: float
+
+class DailyRevenueOut(BaseModel):
+    date          : str
+    daily_revenue : float
+    daily_orders  : int
+
+class CategoryRevenueOut(BaseModel):
+    category : str
+    revenue  : float
+    orders   : int
+
+class SalesIntelligenceOut(BaseModel):
+    today_orders      : int
+    today_revenue     : float
+    week_revenue      : float
+    avg_order_value   : float
+    top_category      : str
+    top_product       : str
+    peak_hour         : str
+    recent_payment_modes : dict

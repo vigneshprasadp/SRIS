@@ -6,20 +6,21 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine, Base, SessionLocal
-from app.routes import products, employees, alerts, branch
+from app.routes import products, employees, alerts, branch, sales
 from app.models import domain   # noqa: registers all models with Base
 
 
 # ─── CREATE TABLES ────────────────────────────────────────────────────────────
-Base.metadata.drop_all(bind=engine)   # reset schema on restart (dev mode)
+# NOTE: drop_all removed — tables now persist between restarts so that
+#       Phase 2 sales data (transactions, revenue) is not lost on reload.
 Base.metadata.create_all(bind=engine)
 
 
 # ─── APP ──────────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="Branch Core Operations System",
-    description="Production-grade branch management API for DMart Whitefield.",
-    version="1.0.0",
+    description="Production-grade branch management + POS API for DMart Whitefield.",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -38,6 +39,7 @@ app.include_router(products.router)
 app.include_router(employees.router)
 app.include_router(alerts.router)
 app.include_router(branch.router)
+app.include_router(sales.router)
 
 
 # ─── STARTUP: seed DB ─────────────────────────────────────────────────────────
@@ -57,10 +59,11 @@ def auto_seed():
 @app.get("/", tags=["Health"])
 def health():
     return {
-        "status": "ok",
-        "app": "Branch Core Operations System",
-        "branch": "DMart Whitefield",
-        "docs": "/docs",
+        "status"  : "ok",
+        "app"     : "Branch Core Operations System",
+        "version" : "2.0.0 — Phase 2 (POS + Analytics)",
+        "branch"  : "DMart Whitefield",
+        "docs"    : "/docs",
     }
 
 @app.get("/health", tags=["Health"])

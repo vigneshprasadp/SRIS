@@ -2,13 +2,17 @@
 seed.py — Populate database with realistic DMart Whitefield data.
 
 Run once: python -m app.utils.seed
+Phase 2: also seeds 7 days of sales transaction history for analytics.
 """
 import datetime
 import random
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine, Base
-from app.models.domain import Product, Employee, BranchSummary, Alert
+from app.models.domain import (
+    Product, Employee, BranchSummary, Alert,
+    SaleTransaction, SaleItem, BranchRevenue, PaymentLog,
+)
 
 BRANCH_ID = "B001"
 
@@ -104,6 +108,108 @@ ROLE_SALARY = {
     "Cleaning Staff": 11000, "Department Head": 40000,
 }
 
+PAYMENT_MODES = ["Cash", "Cash", "UPI", "UPI", "Card", "Wallet"]
+
+
+def _seed_sales(db: Session):
+    """Seed 7 days of realistic sales history."""
+    if db.query(SaleTransaction).count() > 0:
+        return   # already seeded
+
+    products = db.query(Product).filter(Product.branch_id == BRANCH_ID).all()
+    if not products:
+        return
+
+    cashiers = db.query(Employee).filter(
+        Employee.branch_id == BRANCH_ID,
+        Employee.role == "Cashier",
+    ).all()
+    if not cashiers:
+        return
+
+    random.seed(99)
+    now = datetime.datetime.utcnow()
+
+    # 7 days of data: 20-50 transactions per day
+    for day_offset in range(7, 0, -1):
+        sale_date_base = now - datetime.timedelta(days=day_offset)
+        # vary daily count: weekends busier
+        weekday = sale_date_base.weekday()
+        n_sales = random.randint(35, 55) if weekday >= 5 else random.randint(20, 40)
+        daily_rev = 0.0
+
+        for i in range(n_sales):
+            hour   = random.choice([9,10,11,12,13,14,15,16,17,18,19,20])
+            minute = random.randint(0, 59)
+            sale_dt = sale_date_base.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+            cashier   = random.choice(cashiers)
+            pay_mode  = random.choice(PAYMENT_MODES)
+            date_str  = sale_dt.strftime("%Y%m%d")
+            seq       = str(i + 1).zfill(4)
+            inv_no    = f"INV-B001-{date_str}-{seq}"
+
+            # 1–4 products per bill
+            n_items    = random.randint(1, 4)
+            chosen     = random.sample(products, min(n_items, len(products)))
+            total      = 0.0
+            items_data = []
+
+            for prod in chosen:
+                qty      = random.randint(1, 3)
+                subtotal = round(prod.price * qty, 2)
+                total   += subtotal
+                items_data.append((prod, qty, prod.price, subtotal))
+
+            total = round(total, 2)
+            daily_rev += total
+
+            txn = SaleTransaction(
+                branch_id      = BRANCH_ID,
+                cashier_id     = cashier.id,
+                invoice_number = inv_no,
+                total_amount   = total,
+                payment_mode   = pay_mode,
+                sale_date      = sale_dt,
+                created_at     = sale_dt,
+            )
+            db.add(txn)
+            db.flush()
+
+            for prod, qty, unit_price, subtotal in items_data:
+                db.add(SaleItem(
+                    transaction_id = txn.id,
+                    product_id     = prod.id,
+                    quantity       = qty,
+                    unit_price     = unit_price,
+                    subtotal       = subtotal,
+                ))
+
+            db.add(PaymentLog(
+                transaction_id = txn.id,
+                payment_status = "SUCCESS",
+                payment_mode   = pay_mode,
+                timestamp      = sale_dt,
+            ))
+
+        # Upsert BranchRevenue for this day
+        date_key = sale_date_base.strftime("%Y-%m-%d")
+        rev_row = db.query(BranchRevenue).filter(
+            BranchRevenue.branch_id == BRANCH_ID,
+            BranchRevenue.date == date_key,
+        ).first()
+        if rev_row:
+            rev_row.daily_revenue += daily_rev
+            rev_row.daily_orders  += n_sales
+        else:
+            db.add(BranchRevenue(
+                branch_id=BRANCH_ID, date=date_key,
+                daily_revenue=round(daily_rev, 2), daily_orders=n_sales,
+            ))
+
+    db.commit()
+    print(f"[SEED] Sales history seeded: 7 days of transactions.")
+
 
 def seed(db: Session):
     # Branch Summary
@@ -181,6 +287,9 @@ def seed(db: Session):
 
     db.commit()
     print(f"[SEED] Done: {len(PRODUCTS)} products, 30 employees, alerts inserted.")
+
+    # Phase 2: seed sales history
+    _seed_sales(db)
 
 
 if __name__ == "__main__":

@@ -1,1 +1,1 @@
-from app.routes import products, employees, alerts, branch
+from app.routes import products, employees, alerts, branch, sales
