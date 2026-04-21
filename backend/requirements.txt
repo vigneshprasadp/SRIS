@@ -1,6 +1,9 @@
 fastapi
-uvicorn
+uvicorn[standard]
 sqlalchemy
-psycopg2-binary
 pydantic
 python-dotenv
+scikit-learn
+joblib
+numpy
+pandas

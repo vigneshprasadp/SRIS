@@ -1,8 +1,15 @@
 """
 seed.py — Populate database with realistic DMart Whitefield data.
 
-Run once: python -m app.utils.seed
-Phase 2: also seeds 7 days of sales transaction history for analytics.
+Phase 3 upgrade:
+  • 50 products (same catalogue)
+  • 30 employees
+  • 180 days of sale history (6 months)
+    – 20-55 transactions / day
+    – weekend 30 % busier
+    – festival days 60 % busier
+    – category-specific purchase frequencies
+  This gives ~54 000 sale_item rows — excellent ML training volume.
 """
 import datetime
 import random
@@ -16,71 +23,71 @@ from app.models.domain import (
 
 BRANCH_ID = "B001"
 
-# ─── PRODUCTS (50 realistic items across all categories) ─────────────────────
+# ─── PRODUCTS (50 realistic items) ───────────────────────────────────────────
 PRODUCTS = [
     # Dairy
-    ("Amul Full Cream Milk 1L",       "Dairy",       "Milk",        "Amul",     68,   82, 20, 3,  "L"),
-    ("Amul Toned Milk 500ml",         "Dairy",       "Milk",        "Amul",     35,   40, 15, 3,  "L"),
-    ("Amul Butter 500g",              "Dairy",       "Butter",      "Amul",     265,  9,  15, 7,  "g"),
-    ("Amul Cheese Slices 200g",       "Dairy",       "Cheese",      "Amul",     140,  22, 10, 10, "g"),
-    ("Mother Dairy Dahi 500g",        "Dairy",       "Curd",        "M.Dairy",  65,   14, 20, 5,  "g"),
-    ("Amul Paneer 200g",              "Dairy",       "Paneer",      "Amul",     90,   30, 15, 5,  "g"),
+    ("Amul Full Cream Milk 1L",       "Dairy",        "Milk",         "Amul",    68,   82, 20, 3,   "L"),
+    ("Amul Toned Milk 500ml",         "Dairy",        "Milk",         "Amul",    35,   40, 15, 3,   "L"),
+    ("Amul Butter 500g",              "Dairy",        "Butter",       "Amul",    265,  9,  15, 7,   "g"),
+    ("Amul Cheese Slices 200g",       "Dairy",        "Cheese",       "Amul",    140,  22, 10, 10,  "g"),
+    ("Mother Dairy Dahi 500g",        "Dairy",        "Curd",         "M.Dairy", 65,   14, 20, 5,   "g"),
+    ("Amul Paneer 200g",              "Dairy",        "Paneer",       "Amul",    90,   30, 15, 5,   "g"),
     # Grocery
-    ("Tata Salt 1kg",                 "Grocery",     "Salt",        "Tata",     25,   14, 25, None,"kg"),
-    ("Fortune Sunflower Oil 1L",      "Grocery",     "Oil",         "Fortune",  148,  18, 30, None,"L"),
-    ("Aashirvaad Atta 5kg",           "Grocery",     "Flour",       "ITC",      295,  35, 20, None,"kg"),
-    ("India Gate Basmati Rice 5kg",   "Grocery",     "Rice",        "I.Gate",   499,  28, 15, None,"kg"),
-    ("Saffola Gold Oil 1L",           "Grocery",     "Oil",         "Saffola",  178,  50, 20, None,"L"),
-    ("Tata Tea Premium 500g",         "Grocery",     "Tea",         "Tata",     225,  45, 15, None,"g"),
-    ("Bru Original Coffee 200g",      "Grocery",     "Coffee",      "Bru",      250,  32, 10, None,"g"),
-    ("Maggi Masala Noodles 12pk",     "Grocery",     "Noodles",     "Nestle",   180,  60, 20, 180,"pcs"),
-    ("MDH Garam Masala 100g",         "Grocery",     "Spices",      "MDH",      85,   55, 20, None,"g"),
-    ("Toor Dal 1kg",                  "Grocery",     "Pulses",      "DMart",    130,  40, 20, None,"kg"),
-    ("Chana Dal 1kg",                 "Grocery",     "Pulses",      "DMart",    120,  38, 20, None,"kg"),
+    ("Tata Salt 1kg",                 "Grocery",      "Salt",         "Tata",    25,   14, 25, None,"kg"),
+    ("Fortune Sunflower Oil 1L",      "Grocery",      "Oil",          "Fortune", 148,  18, 30, None,"L"),
+    ("Aashirvaad Atta 5kg",           "Grocery",      "Flour",        "ITC",     295,  35, 20, None,"kg"),
+    ("India Gate Basmati Rice 5kg",   "Grocery",      "Rice",         "I.Gate",  499,  28, 15, None,"kg"),
+    ("Saffola Gold Oil 1L",           "Grocery",      "Oil",          "Saffola", 178,  50, 20, None,"L"),
+    ("Tata Tea Premium 500g",         "Grocery",      "Tea",          "Tata",    225,  45, 15, None,"g"),
+    ("Bru Original Coffee 200g",      "Grocery",      "Coffee",       "Bru",     250,  32, 10, None,"g"),
+    ("Maggi Masala Noodles 12pk",     "Grocery",      "Noodles",      "Nestle",  180,  60, 20, 180, "pcs"),
+    ("MDH Garam Masala 100g",         "Grocery",      "Spices",       "MDH",     85,   55, 20, None,"g"),
+    ("Toor Dal 1kg",                  "Grocery",      "Pulses",       "DMart",   130,  40, 20, None,"kg"),
+    ("Chana Dal 1kg",                 "Grocery",      "Pulses",       "DMart",   120,  38, 20, None,"kg"),
     # Bakery
-    ("Britannia Good Day 200g",       "Bakery",      "Biscuits",    "Brit.",    40,   90, 30, 90, "g"),
-    ("Parle-G 800g",                  "Bakery",      "Biscuits",    "Parle",    82,   120, 40, 90,"g"),
-    ("Britannia Brown Bread",         "Bakery",      "Bread",       "Brit.",    45,   6,  20, 4,  "pcs"),
-    ("Modern White Bread",            "Bakery",      "Bread",       "Modern",   38,   8,  20, 4,  "pcs"),
+    ("Britannia Good Day 200g",       "Bakery",       "Biscuits",     "Brit.",   40,   90, 30, 90,  "g"),
+    ("Parle-G 800g",                  "Bakery",       "Biscuits",     "Parle",   82,  120, 40, 90,  "g"),
+    ("Britannia Brown Bread",         "Bakery",       "Bread",        "Brit.",   45,    6, 20, 4,   "pcs"),
+    ("Modern White Bread",            "Bakery",       "Bread",        "Modern",  38,    8, 20, 4,   "pcs"),
     # Beverages
-    ("Tropicana Orange 1L",           "Beverages",   "Juice",       "PepsiCo", 110,  48, 15, 30, "L"),
-    ("Real Mixed Fruit 1L",           "Beverages",   "Juice",       "Dabur",   105,  35, 15, 30, "L"),
-    ("Bisleri Water 2L (6pk)",        "Beverages",   "Water",       "Bisleri",  120, 100, 30, None,"pcs"),
-    ("Red Bull 250ml",                "Beverages",   "Energy",      "RedBull",  115,  44, 15, 180,"ml"),
+    ("Tropicana Orange 1L",           "Beverages",    "Juice",        "PepsiCo", 110,  48, 15, 30,  "L"),
+    ("Real Mixed Fruit 1L",           "Beverages",    "Juice",        "Dabur",   105,  35, 15, 30,  "L"),
+    ("Bisleri Water 2L (6pk)",        "Beverages",    "Water",        "Bisleri", 120, 100, 30, None,"pcs"),
+    ("Red Bull 250ml",                "Beverages",    "Energy",       "RedBull", 115,  44, 15, 180, "ml"),
     # Snacks
-    ("Lay's Classic Salted 100g",     "Snacks",      "Chips",       "PepsiCo",  30,  80, 30, 180,"g"),
-    ("Kurkure Masala Munch 90g",      "Snacks",      "Puffed",      "PepsiCo",  20,  75, 30, 180,"g"),
-    ("Haldiram's Aloo Bhujia 400g",   "Snacks",      "Namkeen",     "Haldram",  120,  50, 20, 90,"g"),
-    ("Cadbury Dairy Milk 160g",       "Snacks",      "Chocolate",   "Mondelez", 100,  45, 15, 180,"g"),
+    ("Lay's Classic Salted 100g",     "Snacks",       "Chips",        "PepsiCo", 30,   80, 30, 180, "g"),
+    ("Kurkure Masala Munch 90g",      "Snacks",       "Puffed",       "PepsiCo", 20,   75, 30, 180, "g"),
+    ("Haldiram's Aloo Bhujia 400g",   "Snacks",       "Namkeen",      "Haldram", 120,  50, 20, 90,  "g"),
+    ("Cadbury Dairy Milk 160g",       "Snacks",       "Chocolate",    "Mondelez",100,  45, 15, 180, "g"),
     # Household
-    ("Surf Excel Matic 1kg",          "Household",   "Detergent",   "HUL",      190,  3,  15, None,"kg"),
-    ("Ariel Matic 2kg",               "Household",   "Detergent",   "P&G",      360,  22, 10, None,"kg"),
-    ("Lux Soap 3pk",                  "Household",   "Soap",        "HUL",       90,   0,  20, None,"pcs"),
-    ("Dettol Handwash 200ml",         "Household",   "Hygiene",     "Reckitt",  85,   40, 20, None,"ml"),
-    ("Harpic Toilet Cleaner 1L",      "Household",   "Cleaner",     "Reckitt",  150,  28, 15, None,"L"),
-    ("Vim Dishwash Bar 6pk",          "Household",   "Dishwash",    "HUL",       75,   60, 20, None,"pcs"),
-    ("Colin Glass Cleaner 500ml",     "Household",   "Cleaner",     "Reckitt",  110,  35, 15, None,"ml"),
+    ("Surf Excel Matic 1kg",          "Household",    "Detergent",    "HUL",     190,   3, 15, None,"kg"),
+    ("Ariel Matic 2kg",               "Household",    "Detergent",    "P&G",     360,  22, 10, None,"kg"),
+    ("Lux Soap 3pk",                  "Household",    "Soap",         "HUL",     90,    0, 20, None,"pcs"),
+    ("Dettol Handwash 200ml",         "Household",    "Hygiene",      "Reckitt", 85,   40, 20, None,"ml"),
+    ("Harpic Toilet Cleaner 1L",      "Household",    "Cleaner",      "Reckitt", 150,  28, 15, None,"L"),
+    ("Vim Dishwash Bar 6pk",          "Household",    "Dishwash",     "HUL",     75,   60, 20, None,"pcs"),
+    ("Colin Glass Cleaner 500ml",     "Household",    "Cleaner",      "Reckitt", 110,  35, 15, None,"ml"),
     # Personal Care
-    ("Colgate MaxFresh 300g",         "Personal Care","Toothpaste",  "Colgate",  130,  70, 20, None,"g"),
-    ("Pantene Shampoo 340ml",         "Personal Care","Shampoo",     "P&G",      245,  38, 15, None,"ml"),
-    ("Dove Shampoo 340ml",            "Personal Care","Shampoo",     "HUL",      255,  42, 15, None,"ml"),
-    ("Gillette Mach3 Razor",          "Personal Care","Razor",       "P&G",      249,  25, 10, None,"pcs"),
-    ("Nivea Body Lotion 400ml",       "Personal Care","Lotion",      "Nivea",    280,  30, 10, None,"ml"),
+    ("Colgate MaxFresh 300g",         "Personal Care","Toothpaste",   "Colgate", 130,  70, 20, None,"g"),
+    ("Pantene Shampoo 340ml",         "Personal Care","Shampoo",      "P&G",     245,  38, 15, None,"ml"),
+    ("Dove Shampoo 340ml",            "Personal Care","Shampoo",      "HUL",     255,  42, 15, None,"ml"),
+    ("Gillette Mach3 Razor",          "Personal Care","Razor",        "P&G",     249,  25, 10, None,"pcs"),
+    ("Nivea Body Lotion 400ml",       "Personal Care","Lotion",       "Nivea",   280,  30, 10, None,"ml"),
     # Clothing
-    ("Cotton T-Shirt Men M",          "Clothing",    "Men T-Shirt", "DMart",    249,  60, 20, None,"pcs"),
-    ("Women Kurti XL",                "Clothing",    "Women Kurti", "DMart",    399,  22, 10, None,"pcs"),
-    ("Kids Shorts 4-5yr",             "Clothing",    "Kids",        "DMart",    199,  35, 15, None,"pcs"),
-    ("Men Formal Trousers 32",        "Clothing",    "Men Trousers","DMart",    699,  18, 10, None,"pcs"),
-    ("Cotton Bed Sheet Double",       "Clothing",    "Bedsheet",    "DMart",    599,  25, 10, None,"pcs"),
+    ("Cotton T-Shirt Men M",          "Clothing",     "Men T-Shirt",  "DMart",   249,  60, 20, None,"pcs"),
+    ("Women Kurti XL",                "Clothing",     "Women Kurti",  "DMart",   399,  22, 10, None,"pcs"),
+    ("Kids Shorts 4-5yr",             "Clothing",     "Kids",         "DMart",   199,  35, 15, None,"pcs"),
+    ("Men Formal Trousers 32",        "Clothing",     "Men Trousers", "DMart",   699,  18, 10, None,"pcs"),
+    ("Cotton Bed Sheet Double",       "Clothing",     "Bedsheet",     "DMart",   599,  25, 10, None,"pcs"),
     # Health
-    ("Dettol Antiseptic 250ml",       "Health",      "Antiseptic",  "Reckitt",  150,  55, 15, None,"ml"),
-    ("Revital H 30-cap",              "Health",      "Vitamins",    "Revital",  275,  20, 8,  None,"pcs"),
+    ("Dettol Antiseptic 250ml",       "Health",       "Antiseptic",   "Reckitt", 150,  55, 15, None,"ml"),
+    ("Revital H 30-cap",              "Health",       "Vitamins",     "Revital", 275,  20,  8, None,"pcs"),
     # Frozen
-    ("McCain Smiles 400g",            "Frozen",      "Frozen Veg",  "McCain",   170,  18, 10, 30, "g"),
-    ("Amul Ice Cream Vanilla 500ml",  "Frozen",      "Ice Cream",   "Amul",     180,  12, 8,  10, "ml"),
+    ("McCain Smiles 400g",            "Frozen",       "Frozen Veg",   "McCain",  170,  18, 10, 30,  "g"),
+    ("Amul Ice Cream Vanilla 500ml",  "Frozen",       "Ice Cream",    "Amul",    180,  12,  8, 10,  "ml"),
 ]
 
-# ─── EMPLOYEES (30 staff members) ────────────────────────────────────────────
+# ─── EMPLOYEES (30 staff members) ─────────────────────────────────────────────
 FIRST_NAMES = ["Priya","Rahul","Anita","Vikram","Sunita","Mohan","Kavya","Deepak",
                 "Ritu","Arjun","Meena","Sanjay","Pooja","Dinesh","Lakshmi","Suresh",
                 "Divya","Ramesh","Geeta","Anil","Neha","Kartik","Shobha","Venkat",
@@ -89,7 +96,7 @@ LAST_NAMES  = ["Sharma","Mehta","Kumar","Das","Rao","Lal","Iyer","Singh",
                 "Verma","Nair","Pillai","Gupta","Reddy","Joshi","Chandra","Agarwal",
                 "Naidu","Patel","Khanna","Bhat","Hegde","Shetty","Pandey","Tiwari",
                 "Desai","Shah","Mishra","Chopra","Kapoor","Saxena"]
-ROLES       = [
+ROLES = [
     "Cashier","Cashier","Cashier","Cashier","Cashier",
     "Supervisor","Supervisor",
     "Floor Manager","Floor Manager",
@@ -107,14 +114,40 @@ ROLE_SALARY = {
     "Inventory Manager": 27000, "Helper": 12000,
     "Cleaning Staff": 11000, "Department Head": 40000,
 }
+PAYMENT_MODES = ["Cash","Cash","UPI","UPI","Card","Wallet"]
 
-PAYMENT_MODES = ["Cash", "Cash", "UPI", "UPI", "Card", "Wallet"]
+# ─── Category-purchase weight tables ────────────────────────────────────────
+# How many times a day (on average) each category item appears in a cart
+CATEGORY_FREQ = {
+    "Dairy":        {"base": 0.55, "weekend": 1.25, "festival": 1.40},
+    "Grocery":      {"base": 0.50, "weekend": 1.20, "festival": 1.35},
+    "Bakery":       {"base": 0.45, "weekend": 1.35, "festival": 1.30},
+    "Beverages":    {"base": 0.38, "weekend": 1.45, "festival": 1.50},
+    "Snacks":       {"base": 0.42, "weekend": 1.55, "festival": 1.60},
+    "Household":    {"base": 0.25, "weekend": 1.10, "festival": 1.15},
+    "Personal Care":{"base": 0.28, "weekend": 1.12, "festival": 1.20},
+    "Clothing":     {"base": 0.18, "weekend": 1.80, "festival": 2.00},
+    "Health":       {"base": 0.20, "weekend": 1.05, "festival": 1.10},
+    "Frozen":       {"base": 0.30, "weekend": 1.60, "festival": 1.70},
+}
+
+FESTIVAL_DATES = {
+    "2024-08-15","2024-10-02","2024-10-12","2024-10-24",
+    "2024-11-01","2024-11-02","2024-11-03","2024-11-15",
+    "2024-12-25","2024-12-31",
+    "2025-01-01","2025-01-14","2025-01-26",
+    "2025-03-15","2025-04-14",
+    "2025-10-02","2025-11-01","2025-12-25",
+    "2026-01-01","2026-01-14","2026-01-26",
+    "2026-03-25","2026-04-14",
+}
 
 
 def _seed_sales(db: Session):
-    """Seed 7 days of realistic sales history."""
+    """Seed 180 days of realistic sales history for ML training."""
     if db.query(SaleTransaction).count() > 0:
-        return   # already seeded
+        print("[SEED] Sales already present — skipping.")
+        return
 
     products = db.query(Product).filter(Product.branch_id == BRANCH_ID).all()
     if not products:
@@ -130,32 +163,58 @@ def _seed_sales(db: Session):
     random.seed(99)
     now = datetime.datetime.utcnow()
 
-    # 7 days of data: 20-50 transactions per day
-    for day_offset in range(7, 0, -1):
-        sale_date_base = now - datetime.timedelta(days=day_offset)
-        # vary daily count: weekends busier
-        weekday = sale_date_base.weekday()
-        n_sales = random.randint(35, 55) if weekday >= 5 else random.randint(20, 40)
+    # 180 days spanning from ~6 months ago to yesterday
+    for day_offset in range(180, 0, -1):
+        d = now - datetime.timedelta(days=day_offset)
+        date_str_key = d.strftime("%Y-%m-%d")
+        weekday = d.weekday()            # 0=Mon … 6=Sun
+        is_weekend  = weekday >= 5
+        is_festival = date_str_key in FESTIVAL_DATES
+
+        # Base transactions per day
+        if is_festival:
+            n_sales = random.randint(55, 80)
+        elif is_weekend:
+            n_sales = random.randint(38, 60)
+        else:
+            n_sales = random.randint(22, 40)
+
         daily_rev = 0.0
 
         for i in range(n_sales):
-            hour   = random.choice([9,10,11,12,13,14,15,16,17,18,19,20])
-            minute = random.randint(0, 59)
-            sale_dt = sale_date_base.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            hour    = random.choice([9,10,10,11,11,12,13,14,15,15,16,17,17,18,18,19,20])
+            minute  = random.randint(0, 59)
+            sale_dt = d.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
-            cashier   = random.choice(cashiers)
-            pay_mode  = random.choice(PAYMENT_MODES)
-            date_str  = sale_dt.strftime("%Y%m%d")
-            seq       = str(i + 1).zfill(4)
-            inv_no    = f"INV-B001-{date_str}-{seq}"
+            cashier  = random.choice(cashiers)
+            pay_mode = random.choice(PAYMENT_MODES)
+            date_str = d.strftime("%Y%m%d")
+            seq      = str(i + 1).zfill(4)
+            inv_no   = f"INV-B001-{date_str}-{seq}"
 
-            # 1–4 products per bill
-            n_items    = random.randint(1, 4)
-            chosen     = random.sample(products, min(n_items, len(products)))
-            total      = 0.0
+            # Weighted product selection: each category has its own freq
+            chosen_products = []
+            for prod in products:
+                freq_info = CATEGORY_FREQ.get(prod.category, {"base": 0.3, "weekend": 1.0, "festival": 1.0})
+                prob = freq_info["base"]
+                if is_weekend:
+                    prob *= freq_info["weekend"]
+                if is_festival:
+                    prob *= freq_info["festival"]
+                # Cap at ~0.85 per item per transaction
+                prob = min(prob, 0.85)
+                if random.random() < prob:
+                    chosen_products.append(prod)
+
+            if not chosen_products:
+                chosen_products = [random.choice(products)]
+
+            # Limit cart size to 1-5 items
+            chosen_products = chosen_products[:random.randint(1, 5)]
+
+            total = 0.0
             items_data = []
-
-            for prod in chosen:
+            for prod in chosen_products:
                 qty      = random.randint(1, 3)
                 subtotal = round(prod.price * qty, 2)
                 total   += subtotal
@@ -193,29 +252,30 @@ def _seed_sales(db: Session):
             ))
 
         # Upsert BranchRevenue for this day
-        date_key = sale_date_base.strftime("%Y-%m-%d")
         rev_row = db.query(BranchRevenue).filter(
             BranchRevenue.branch_id == BRANCH_ID,
-            BranchRevenue.date == date_key,
+            BranchRevenue.date      == date_str_key,
         ).first()
         if rev_row:
             rev_row.daily_revenue += daily_rev
             rev_row.daily_orders  += n_sales
         else:
             db.add(BranchRevenue(
-                branch_id=BRANCH_ID, date=date_key,
+                branch_id=BRANCH_ID, date=date_str_key,
                 daily_revenue=round(daily_rev, 2), daily_orders=n_sales,
             ))
 
     db.commit()
-    print(f"[SEED] Sales history seeded: 7 days of transactions.")
+    txn_count = db.query(SaleTransaction).count()
+    item_count = db.query(SaleItem).count()
+    print(f"[SEED] Sales seeded: {txn_count} transactions, {item_count} sale items (180 days).")
 
 
 def seed(db: Session):
-    # Branch Summary
+    # ── Branch Summary ──────────────────────────────────────────────
     if not db.query(BranchSummary).filter(BranchSummary.branch_id == BRANCH_ID).first():
         db.add(BranchSummary(
-            branch_id=BRANCH_ID,
+            branch_id="B001",
             branch_name="DMart Whitefield",
             location="Whitefield Main Road, Bengaluru – 560066",
             today_revenue=84500.0,
@@ -225,7 +285,7 @@ def seed(db: Session):
             open_since=datetime.datetime(2018, 3, 15),
         ))
 
-    # Products
+    # ── Products ────────────────────────────────────────────────────
     if db.query(Product).count() == 0:
         for row in PRODUCTS:
             name, cat, subcat, brand, price, stock, reorder, expiry, unit = row
@@ -236,12 +296,12 @@ def seed(db: Session):
                 branch_id=BRANCH_ID, is_active=True,
             ))
 
-    # Employees
+    # ── Employees ───────────────────────────────────────────────────
     if db.query(Employee).count() == 0:
         random.seed(42)
         for i in range(30):
-            role  = ROLES[i % len(ROLES)]
-            shift = SHIFTS[i % len(SHIFTS)]
+            role   = ROLES[i % len(ROLES)]
+            shift  = SHIFTS[i % len(SHIFTS)]
             status = "PRESENT" if random.random() > 0.15 else random.choice(["ABSENT","LEAVE"])
             db.add(Employee(
                 name=f"{FIRST_NAMES[i]} {LAST_NAMES[i]}",
@@ -253,7 +313,7 @@ def seed(db: Session):
 
     db.commit()
 
-    # Auto-generate low-stock alerts post-seed
+    # ── Alerts ──────────────────────────────────────────────────────
     products = db.query(Product).filter(
         Product.branch_id == BRANCH_ID,
         Product.stock < Product.reorder_level,
@@ -274,9 +334,11 @@ def seed(db: Session):
                 severity=severity, branch_id=BRANCH_ID,
             ))
 
-    # Add some expiry alerts for perishables
+    # ── Expiry alerts ───────────────────────────────────────────────
     perishables = db.query(Product).filter(
-        Product.branch_id == BRANCH_ID, Product.expiry_days != None, Product.expiry_days <= 5
+        Product.branch_id == BRANCH_ID,
+        Product.expiry_days != None,
+        Product.expiry_days <= 5,
     ).all()
     for prod in perishables[:3]:
         db.add(Alert(
@@ -286,9 +348,9 @@ def seed(db: Session):
         ))
 
     db.commit()
-    print(f"[SEED] Done: {len(PRODUCTS)} products, 30 employees, alerts inserted.")
+    print(f"[SEED] Core data: {len(PRODUCTS)} products, 30 employees, alerts done.")
 
-    # Phase 2: seed sales history
+    # ── Phase 2+3: Sales history ─────────────────────────────────────
     _seed_sales(db)
 
 

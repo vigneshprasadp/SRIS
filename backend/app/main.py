@@ -1,26 +1,28 @@
 """
 main.py — FastAPI application entrypoint
 Branch Core Operations System — DMart Whitefield
+Phase 4: Multi-Branch Enterprise Admin Intelligence System
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine, Base, SessionLocal
 from app.routes import products, employees, alerts, branch, sales
+from app.routes import ai as ai_routes
+from app.routes import admin as admin_routes          # Phase 4 — Super Admin
+from app.routes import auth as auth_routes            # Login endpoint
 from app.models import domain   # noqa: registers all models with Base
 
 
 # ─── CREATE TABLES ────────────────────────────────────────────────────────────
-# NOTE: drop_all removed — tables now persist between restarts so that
-#       Phase 2 sales data (transactions, revenue) is not lost on reload.
 Base.metadata.create_all(bind=engine)
 
 
 # ─── APP ──────────────────────────────────────────────────────────────────────
 app = FastAPI(
-    title="Branch Core Operations System",
-    description="Production-grade branch management + POS API for DMart Whitefield.",
-    version="2.0.0",
+    title="SRIS Enterprise Admin System",
+    description="Multi-branch retail intelligence platform — Phase 4: Super Admin Control Tower.",
+    version="4.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -40,19 +42,35 @@ app.include_router(employees.router)
 app.include_router(alerts.router)
 app.include_router(branch.router)
 app.include_router(sales.router)
+app.include_router(ai_routes.router)          # Phase 3 — AI Intelligence
+app.include_router(admin_routes.router)       # Phase 4 — Super Admin
+app.include_router(auth_routes.router)        # Auth / Login
 
 
-# ─── STARTUP: seed DB ─────────────────────────────────────────────────────────
+# ─── STARTUP: seed DB + train ML models ───────────────────────────────────────
 @app.on_event("startup")
-def auto_seed():
-    """Seed demo data on first run (no-op if tables already populated)."""
+def startup_tasks():
+    """
+    1. Seed demo data on first run (no-op if tables already populated).
+    2. Auto-train ML models if .pkl files are missing.
+    """
+    db = SessionLocal()
     try:
-        from app.utils.seed import seed
-        db = SessionLocal()
-        seed(db)
+        # ── Phase 1/2 seed ────────────────────────────────────
+        try:
+            from app.utils.seed import seed
+            seed(db)
+        except Exception as e:
+            print(f"[WARN] Seeding skipped: {e}")
+
+        # ── Phase 3 ML auto-train ─────────────────────────────
+        try:
+            from app.ml.train import auto_train_if_needed
+            auto_train_if_needed(db)
+        except Exception as e:
+            print(f"[WARN] ML training skipped: {e}")
+    finally:
         db.close()
-    except Exception as e:
-        print(f"[WARN] Seeding skipped: {e}")
 
 
 # ─── HEALTH ───────────────────────────────────────────────────────────────────
@@ -60,9 +78,9 @@ def auto_seed():
 def health():
     return {
         "status"  : "ok",
-        "app"     : "Branch Core Operations System",
-        "version" : "2.0.0 — Phase 2 (POS + Analytics)",
-        "branch"  : "DMart Whitefield",
+        "app"     : "SRIS Enterprise Admin System",
+        "version" : "4.0.0 — Phase 4 (Multi-Branch Enterprise)",
+        "branch"  : "All Branches",
         "docs"    : "/docs",
     }
 

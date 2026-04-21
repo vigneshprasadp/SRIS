@@ -14,6 +14,7 @@ from app.services.ai_service import (
     get_product_clusters,
     get_forecast_chart,
     get_branch_ai_insights,
+    get_anomaly_alerts,
 )
 
 router = APIRouter(prefix="/api/ai", tags=["AI Intelligence"])
@@ -92,24 +93,22 @@ def forecast_chart(
     return get_forecast_chart(db, product_id, days)
 
 
-# ── 7. EXPORT TRAINING DATA CSV ───────────────────────────────────────────────
+# ── 7. EXPORT TRAINING DATA (schema demo) ──────────────────────────────────────
 @router.get(
     "/export-training-data",
-    summary="Download synthetic daily_product_sales.csv used for ML training",
+    summary="Show the training data schema used for ML (first 200 rows as JSON)",
 )
 def export_training_data(
     branch_id: str = Query("B001"),
     db: Session = Depends(get_db),
 ):
-    """
-    Returns the first 200 rows as JSON to demonstrate the training schema.
-    For CSV download, use the /docs UI or add Accept: text/csv header.
-    """
     from app.ml.train import generate_training_data
-    import numpy as np
     X, y = generate_training_data(db)
-    cols = ["day_of_week", "weekend_flag", "festival_flag",
-            "price_bucket", "reorder_level", "price_norm"]
+    cols = [
+        "day_of_week", "weekend_flag", "festival_flag",
+        "price_bucket", "reorder_level_norm", "price_norm",
+        "rolling_avg_7d", "rolling_avg_30d",
+    ]
     rows = []
     for i in range(min(200, len(X))):
         row = {c: float(X[i][j]) for j, c in enumerate(cols)}
@@ -119,4 +118,52 @@ def export_training_data(
         "schema"      : cols + ["quantity_sold"],
         "total_rows"  : len(X),
         "sample_rows" : rows,
+    }
+
+
+# ── 8. ANOMALY ALERTS ─────────────────────────────────────────────────────────
+@router.get(
+    "/anomaly-alerts",
+    summary="Detect sales stalls, demand spikes, and critical stock risks",
+)
+def anomaly_alerts(
+    branch_id: str = Query("B001"),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns list of anomaly objects each with:
+    - type: SALES_STALL | DEMAND_SPIKE | STOCK_RISK
+    - severity: INFO | WARNING | CRITICAL
+    - detail: human-readable explanation
+    """
+    return get_anomaly_alerts(db, branch_id)
+
+
+# ── 9. RETRAIN MODELS ─────────────────────────────────────────────────────────
+@router.post(
+    "/retrain",
+    summary="Force re-train all ML models from latest data",
+)
+def retrain_models(
+    db: Session = Depends(get_db),
+):
+    """
+    Deletes existing .pkl files and retrains on current DB data.
+    Operation takes ~5-15 seconds depending on dataset size.
+    """
+    from app.ml.train import DEMAND_PKL, CLUSTER_PKL, ENCODER_PKL, train_and_save_models
+    import pathlib
+    for f in [DEMAND_PKL, CLUSTER_PKL, ENCODER_PKL]:
+        pathlib.Path(f).unlink(missing_ok=True)
+
+    # Reset cached models
+    import app.services.ai_service as svc
+    svc._rf_model = None
+    svc._km_model = None
+    svc._le       = None
+
+    train_and_save_models(db)
+    return {
+        "status"  : "success",
+        "message" : "Models retrained from latest Phase 2 sales data.",
     }

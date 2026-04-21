@@ -15,6 +15,21 @@ class AttendanceStatus(str, enum.Enum):
     ABSENT  = "ABSENT"
     LEAVE   = "LEAVE"
 
+class BranchStatus(str, enum.Enum):
+    ACTIVE   = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    RENOVATING = "RENOVATING"
+
+class TransferStatus(str, enum.Enum):
+    PENDING   = "PENDING"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+class UserRole(str, enum.Enum):
+    ADMIN          = "ADMIN"
+    BRANCH_MANAGER = "BRANCH_MANAGER"
+    CASHIER        = "CASHIER"
+
 class ShiftType(str, enum.Enum):
     MORNING = "Morning"
     EVENING = "Evening"
@@ -201,4 +216,81 @@ class PaymentLog(Base):
 
     # relationships
     transaction = relationship("SaleTransaction", back_populates="pay_log")
-\
+
+
+# ─────────────────────────────────────────────
+#  PHASE 4 — ENTERPRISE MODELS
+# ─────────────────────────────────────────────
+
+class Branch(Base):
+    """Enterprise-wide branch registry (Phase 4)."""
+    __tablename__ = "branches"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    branch_code  = Column(String(20), nullable=False, unique=True, index=True)  # e.g. B001
+    name         = Column(String(200), nullable=False)
+    location     = Column(String(300), nullable=True)
+    manager_id   = Column(Integer, ForeignKey("employees.id", ondelete="SET NULL"), nullable=True)
+    opening_date = Column(DateTime, nullable=True)
+    status       = Column(String(20), nullable=False, default="ACTIVE")  # ACTIVE|INACTIVE|RENOVATING
+    city         = Column(String(100), nullable=True)
+    pincode      = Column(String(10), nullable=True)
+    phone        = Column(String(20), nullable=True)
+    created_at   = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at   = Column(DateTime, default=datetime.datetime.utcnow,
+                          onupdate=datetime.datetime.utcnow)
+
+    manager = relationship("Employee", foreign_keys=[manager_id])
+
+
+class Warehouse(Base):
+    """Central warehouse inventory (Phase 4)."""
+    __tablename__ = "warehouse"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    product_name   = Column(String(200), nullable=False, index=True)
+    category       = Column(String(100), nullable=True)
+    total_stock    = Column(Integer, nullable=False, default=0)
+    incoming_stock = Column(Integer, nullable=False, default=0)
+    outgoing_stock = Column(Integer, nullable=False, default=0)
+    supplier       = Column(String(200), nullable=True)
+    unit           = Column(String(50), nullable=True, default="unit")
+    reorder_level  = Column(Integer, nullable=False, default=100)
+    last_restocked = Column(DateTime, nullable=True)
+    created_at     = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at     = Column(DateTime, default=datetime.datetime.utcnow,
+                            onupdate=datetime.datetime.utcnow)
+
+
+class StockTransfer(Base):
+    """Cross-branch stock movement log (Phase 4)."""
+    __tablename__ = "stock_transfers"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    from_branch = Column(String(20), nullable=False, index=True)  # branch_code
+    to_branch   = Column(String(20), nullable=False, index=True)
+    product_id  = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True)
+    quantity    = Column(Integer, nullable=False)
+    status      = Column(String(20), nullable=False, default="COMPLETED")  # PENDING|COMPLETED|CANCELLED
+    notes       = Column(Text, nullable=True)
+    date        = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    created_at  = Column(DateTime, default=datetime.datetime.utcnow)
+
+    product = relationship("Product")
+
+
+class BranchMetrics(Base):
+    """Aggregated KPIs per branch (Phase 4 — updated periodically)."""
+    __tablename__ = "branch_metrics"
+
+    id                = Column(Integer, primary_key=True, index=True)
+    branch_id         = Column(String(20), nullable=False, unique=True, index=True)
+    total_revenue     = Column(Float, default=0.0)
+    monthly_revenue   = Column(Float, default=0.0)
+    total_orders      = Column(Integer, default=0)
+    avg_order_value   = Column(Float, default=0.0)
+    stock_health_score= Column(Float, default=0.0)   # 0-100
+    low_stock_items   = Column(Integer, default=0)
+    staff_count       = Column(Integer, default=0)
+    last_updated      = Column(DateTime, default=datetime.datetime.utcnow,
+                               onupdate=datetime.datetime.utcnow)

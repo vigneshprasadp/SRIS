@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
-import { ShoppingCart, Search, X, Receipt, Users } from 'lucide-react';
-
-const API = 'http://localhost:8000';
+import { useState, useCallback } from 'react';
+import { ShoppingCart, Search, X, Receipt, User, Truck } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const PAYMENT_MODES = [
   { key: 'Cash',   label: '💵 Cash',   cls: 'payment-btn-cash'   },
@@ -17,11 +16,16 @@ const CATEGORY_COLORS = {
   Frozen:'#FFCBE1', Other:'#FFDAB4',
 };
 
+const CAT_EMOJI = {
+  Dairy:'🥛', Grocery:'🛒', Bakery:'🍞', Beverages:'🧃',
+  Snacks:'🍿', Household:'🧹', Clothing:'👕', Health:'💊',
+  Frozen:'🧊', 'Personal Care':'🧴',
+};
+
 function fmt(n) { return `₹${Number(n).toFixed(2)}`; }
 
 /* ─── Invoice Modal ─────────────────────────────────────────── */
 function InvoiceModal({ invoice, onClose }) {
-  const dt = new Date(invoice.sale_date);
   return (
     <div className="invoice-overlay" onClick={onClose}>
       <div className="invoice-card" onClick={e => e.stopPropagation()}>
@@ -35,11 +39,11 @@ function InvoiceModal({ invoice, onClose }) {
           <div className="invoice-meta">
             <div className="invoice-meta-item">
               <div className="invoice-meta-label">Date</div>
-              <div className="invoice-meta-value">{dt.toLocaleDateString('en-IN')}</div>
+              <div className="invoice-meta-value">{new Date(invoice.sale_date).toLocaleDateString('en-IN')}</div>
             </div>
             <div className="invoice-meta-item">
               <div className="invoice-meta-label">Time</div>
-              <div className="invoice-meta-value">{dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>
+              <div className="invoice-meta-value">{new Date(invoice.sale_date).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' })}</div>
             </div>
             <div className="invoice-meta-item">
               <div className="invoice-meta-label">Payment</div>
@@ -47,7 +51,7 @@ function InvoiceModal({ invoice, onClose }) {
             </div>
             <div className="invoice-meta-item">
               <div className="invoice-meta-label">Cashier</div>
-              <div className="invoice-meta-value">{invoice.cashier_name || 'Self'}</div>
+              <div className="invoice-meta-value">{invoice.cashier_name}</div>
             </div>
           </div>
 
@@ -55,8 +59,8 @@ function InvoiceModal({ invoice, onClose }) {
             <thead>
               <tr>
                 <th>Item</th>
-                <th style={{textAlign:'center'}}>Qty</th>
-                <th style={{textAlign:'right'}}>Price</th>
+                <th style={{ textAlign:'center' }}>Qty</th>
+                <th style={{ textAlign:'right' }}>Price</th>
                 <th>Subtotal</th>
               </tr>
             </thead>
@@ -64,8 +68,8 @@ function InvoiceModal({ invoice, onClose }) {
               {invoice.items.map((item, i) => (
                 <tr key={i}>
                   <td>{item.product_name}</td>
-                  <td style={{textAlign:'center'}}>{item.quantity}</td>
-                  <td style={{textAlign:'right', color:'var(--text-muted)'}}>{fmt(item.unit_price)}</td>
+                  <td style={{ textAlign:'center' }}>{item.quantity}</td>
+                  <td style={{ textAlign:'right', color:'var(--text-muted)' }}>{fmt(item.unit_price)}</td>
                   <td>{fmt(item.subtotal)}</td>
                 </tr>
               ))}
@@ -89,43 +93,27 @@ function InvoiceModal({ invoice, onClose }) {
 
 /* ─── Main POS Page ─────────────────────────────────────────── */
 export default function POS() {
-  const [products, setProducts]       = useState([]);
-  const [cashiers, setCashiers]       = useState([]);
-  const [search, setSearch]           = useState('');
-  const [catFilter, setCatFilter]     = useState('All');
-  const [cart, setCart]               = useState([]);   // [{product, qty}]
-  const [payMode, setPayMode]         = useState('UPI');
-  const [cashierId, setCashierId]     = useState('');
-  const [loading, setLoading]         = useState(true);
-  const [submitting, setSubmitting]   = useState(false);
-  const [invoice, setInvoice]         = useState(null);
-  const [error, setError]             = useState('');
+  const { user, getBranchInventory, deductStock, addRevenue } = useAuth();
+  const branchId = user?.branchId || 'B001';
 
-  /* fetch products */
-  useEffect(() => {
-    setLoading(true);
-    fetch(`${API}/api/products?branch_id=B001&limit=200`)
-      .then(r => r.json())
-      .then(d => { setProducts(d.items || []); setLoading(false); })
-      .catch(() => setLoading(false));
+  const products = getBranchInventory(branchId).filter(p => p.is_active);
 
-    fetch(`${API}/api/employees?branch_id=B001&role=Cashier&limit=50`)
-      .then(r => r.json())
-      .then(d => { setCashiers(d.items || []); })
-      .catch(() => {});
-  }, []);
+  const [search, setSearch]         = useState('');
+  const [catFilter, setCatFilter]   = useState('All');
+  const [cart, setCart]             = useState([]);
+  const [payMode, setPayMode]       = useState('UPI');
+  const [submitting, setSubmitting] = useState(false);
+  const [invoice, setInvoice]       = useState(null);
+  const [error, setError]           = useState('');
 
-  /* derived lists */
-  const categories = ['All', ...new Set(products.map(p => p.category))].sort((a,b)=>
+  const categories = ['All', ...new Set(products.map(p => p.category))].sort((a, b) =>
     a === 'All' ? -1 : b === 'All' ? 1 : a.localeCompare(b)
   );
 
   const filtered = products.filter(p => {
-    if (!p.is_active) return false;
-    const inCat = catFilter === 'All' || p.category === catFilter;
-    const inSrch = !search || p.name.toLowerCase().includes(search.toLowerCase())
-      || p.category.toLowerCase().includes(search.toLowerCase())
-      || (p.brand || '').toLowerCase().includes(search.toLowerCase());
+    const inCat  = catFilter === 'All' || p.category === catFilter;
+    const inSrch = !search || p.name.toLowerCase().includes(search.toLowerCase()) ||
+                   (p.brand || '').toLowerCase().includes(search.toLowerCase());
     return inCat && inSrch;
   });
 
@@ -135,7 +123,7 @@ export default function POS() {
       const existing = prev.find(ci => ci.product.id === product.id);
       if (existing) {
         if (existing.qty >= product.stock) return prev;
-        return prev.map(ci => ci.product.id === product.id ? {...ci, qty: ci.qty + 1} : ci);
+        return prev.map(ci => ci.product.id === product.id ? { ...ci, qty: ci.qty + 1 } : ci);
       }
       return [...prev, { product, qty: 1 }];
     });
@@ -155,9 +143,7 @@ export default function POS() {
   };
 
   const removeFromCart = (pid) => setCart(prev => prev.filter(ci => ci.product.id !== pid));
-
   const inCart = (pid) => cart.find(ci => ci.product.id === pid);
-
   const cartTotal = cart.reduce((sum, ci) => sum + ci.product.price * ci.qty, 0);
   const cartItems = cart.reduce((sum, ci) => sum + ci.qty, 0);
 
@@ -167,29 +153,31 @@ export default function POS() {
     setSubmitting(true);
     setError('');
     try {
-      const body = {
-        branch_id: 'B001',
-        cashier_id: cashierId ? Number(cashierId) : null,
-        products: cart.map(ci => ({ product_id: ci.product.id, quantity: ci.qty })),
+      await new Promise(r => setTimeout(r, 700)); // simulate processing
+
+      const invoiceData = {
+        invoice_number: `INV-${Date.now().toString().slice(-8)}`,
+        sale_date: new Date().toISOString(),
         payment_mode: payMode,
+        cashier_name: user?.name || 'Cashier',
+        branch_id: branchId,
+        items: cart.map(ci => ({
+          product_name: ci.product.name,
+          quantity: ci.qty,
+          unit_price: ci.product.price,
+          subtotal: ci.product.price * ci.qty,
+        })),
+        total_amount: cartTotal,
       };
-      const res = await fetch(`${API}/api/sales/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Sale failed');
-      }
-      const data = await res.json();
-      setInvoice(data);
+
+      // Deduct from branch inventory
+      deductStock(branchId, cart.map(ci => ({ productId: ci.product.id, quantity: ci.qty })));
+      // Add to branch revenue
+      addRevenue(branchId, cartTotal);
+
+      setInvoice(invoiceData);
       setCart([]);
-      // refresh products for updated stock
-      fetch(`${API}/api/products?branch_id=B001&limit=200`)
-        .then(r => r.json())
-        .then(d => setProducts(d.items || []));
-    } catch(e) {
+    } catch (e) {
       setError(e.message);
     } finally {
       setSubmitting(false);
@@ -204,18 +192,16 @@ export default function POS() {
           <h1 className="page-title">POS Billing Counter</h1>
           <p className="page-subtitle">Search products · Build cart · Generate invoice</p>
         </div>
-        <div className="pos-cashier-bar" style={{width:320}}>
-          <Users size={16} color="var(--text-muted)" />
-          <select
-            className="pos-select"
-            value={cashierId}
-            onChange={e => setCashierId(e.target.value)}
-          >
-            <option value="">Select Cashier</option>
-            {cashiers.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
+        <div style={{
+          display:'flex', alignItems:'center', gap:8,
+          background:'rgba(79,214,156,.15)', border:'1px solid rgba(79,214,156,.3)',
+          borderRadius:12, padding:'10px 16px',
+        }}>
+          <User size={14} color="#059669"/>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700, color:'#065f46' }}>{user?.name}</div>
+            <div style={{ fontSize:10, color:'#059669' }}>Logged in · Ready to bill</div>
+          </div>
         </div>
       </div>
 
@@ -226,7 +212,7 @@ export default function POS() {
           fontWeight:600, fontSize:13, display:'flex', alignItems:'center', gap:8,
         }}>
           ⚠️ {error}
-          <button onClick={()=>setError('')} style={{marginLeft:'auto',background:'none',border:'none',cursor:'pointer',color:'inherit'}}>×</button>
+          <button onClick={() => setError('')} style={{ marginLeft:'auto', background:'none', border:'none', cursor:'pointer', color:'inherit' }}>×</button>
         </div>
       )}
 
@@ -234,33 +220,31 @@ export default function POS() {
         {/* ─── LEFT: Product Panel ─── */}
         <div className="pos-product-panel">
           {/* Search */}
-          <div className="search-input-wrap" style={{position:'relative'}}>
+          <div className="search-input-wrap" style={{ position:'relative' }}>
             <Search size={16} className="search-icon" />
             <input
               className="search-input"
-              placeholder="Search by name, category or brand…"
+              placeholder="Search by name or brand…"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
           </div>
 
           {/* Category pills */}
-          <div className="filter-pills" style={{marginBottom:0}}>
+          <div className="filter-pills" style={{ marginBottom:0 }}>
             {categories.map(c => (
               <button
                 key={c}
                 className={`filter-pill${catFilter === c ? ' active' : ''}`}
                 onClick={() => setCatFilter(c)}
               >
-                {c}
+                {CAT_EMOJI[c] || ''} {c}
               </button>
             ))}
           </div>
 
           {/* Product grid */}
-          {loading ? (
-            <div className="spinner-wrap"><div className="spinner"/></div>
-          ) : filtered.length === 0 ? (
+          {filtered.length === 0 ? (
             <div className="empty-state">
               <Search size={40}/>
               <h3>No products found</h3>
@@ -269,9 +253,10 @@ export default function POS() {
           ) : (
             <div className="pos-product-scroll">
               {filtered.map(prod => {
-                const inC    = inCart(prod.id);
-                const color  = CATEGORY_COLORS[prod.category] || '#BCD8EC';
-                const oos    = prod.stock <= 0;
+                const inC   = inCart(prod.id);
+                const color = CATEGORY_COLORS[prod.category] || '#BCD8EC';
+                const oos   = prod.stock <= 0;
+                const isLow = prod.stock > 0 && prod.stock < prod.reorder_level;
                 return (
                   <div
                     key={prod.id}
@@ -281,14 +266,9 @@ export default function POS() {
                     <div style={{
                       height:56, borderRadius:10, marginBottom:10,
                       background:`linear-gradient(135deg, ${color}, ${color}99)`,
-                      display:'flex', alignItems:'center', justifyContent:'center',
-                      fontSize:22,
+                      display:'flex', alignItems:'center', justifyContent:'center', fontSize:22,
                     }}>
-                      {prod.category === 'Dairy' ? '🥛' : prod.category === 'Grocery' ? '🛒' :
-                       prod.category === 'Bakery' ? '🍞' : prod.category === 'Beverages' ? '🧃' :
-                       prod.category === 'Snacks' ? '🍿' : prod.category === 'Household' ? '🧹' :
-                       prod.category === 'Clothing' ? '👕' : prod.category === 'Health' ? '💊' :
-                       prod.category === 'Frozen' ? '🧊' : '📦'}
+                      {CAT_EMOJI[prod.category] || '📦'}
                     </div>
                     <div className="pos-product-card-cat">{prod.category}</div>
                     <div className="pos-product-card-name">{prod.name}</div>
@@ -296,8 +276,8 @@ export default function POS() {
                     <div className="pos-product-card-footer">
                       <div>
                         <div className="pos-product-price">₹{prod.price}</div>
-                        <div className="pos-product-stock">
-                          {oos ? '❌ Out of stock' : `${prod.stock} ${prod.unit || 'units'} left`}
+                        <div className="pos-product-stock" style={{ color: oos ? '#dc2626' : isLow ? '#d97706' : undefined }}>
+                          {oos ? '❌ Out of stock' : isLow ? `⚠️ ${prod.stock} left` : `${prod.stock} ${prod.unit || 'units'} left`}
                         </div>
                       </div>
                       {inC ? (
@@ -334,7 +314,7 @@ export default function POS() {
             {cart.length > 0 && (
               <button
                 onClick={() => setCart([])}
-                style={{background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',fontSize:12,fontWeight:600}}
+                style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', fontSize:12, fontWeight:600 }}
               >Clear all</button>
             )}
           </div>
@@ -363,14 +343,8 @@ export default function POS() {
 
           {/* Bill summary */}
           <div className="pos-bill-summary">
-            <div className="bill-row">
-              <span>Items ({cartItems})</span>
-              <span>{fmt(cartTotal)}</span>
-            </div>
-            <div className="bill-row">
-              <span>GST (0%)</span>
-              <span>₹0.00</span>
-            </div>
+            <div className="bill-row"><span>Items ({cartItems})</span><span>{fmt(cartTotal)}</span></div>
+            <div className="bill-row"><span>GST (0%)</span><span>₹0.00</span></div>
             <div className="bill-total-row">
               <span className="bill-total-label">Total</span>
               <span className="bill-total-amount">{fmt(cartTotal)}</span>
